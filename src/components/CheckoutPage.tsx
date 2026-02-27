@@ -32,7 +32,22 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    setLoading(true);
     api.products.get(productId).then(setProduct).catch(() => setProduct(null)).finally(() => setLoading(false));
+  }, [productId]);
+
+  // Reset payment state when opening checkout for a different product or second purchase
+  useEffect(() => {
+    setOrderId(null);
+    setPaymentStatus('idle');
+    setPurchasedKey(null);
+    setQrisUrl(null);
+    setQuantity(1);
+    setPurchasedQuantity(1);
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
   }, [productId]);
 
   useEffect(() => {
