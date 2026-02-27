@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginPage, RegisterPage } from './components/AuthPages';
 import { StoreLanding } from './components/StoreLanding';
@@ -26,6 +26,39 @@ function AppContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const checkoutKeyRef = useRef(0);
 
+  // URL = source of truth: /checkout?product=ID selalu berarti "form checkout baru" (satu link TemanQRIS = satu pemakaian)
+  useEffect(() => {
+    const syncFromUrl = () => {
+      const path = window.location.pathname;
+      const params = new URLSearchParams(window.location.search);
+      const productIdFromUrl = params.get('product');
+      if (path === '/checkout' && productIdFromUrl) {
+        checkoutKeyRef.current += 1;
+        setCurrentPage('checkout');
+        setSelectedProductId(productIdFromUrl);
+      } else if (path === '/' || path === '') {
+        setCurrentPage('landing');
+        setSelectedProductId(null);
+      }
+    };
+    syncFromUrl();
+    window.addEventListener('popstate', syncFromUrl);
+    return () => window.removeEventListener('popstate', syncFromUrl);
+  }, []);
+
+  const navigateToCheckout = (productId: string) => {
+    checkoutKeyRef.current += 1;
+    setSelectedProductId(productId);
+    setCurrentPage('checkout');
+    window.history.pushState({}, '', `/checkout?product=${encodeURIComponent(productId)}`);
+  };
+
+  const navigateToStore = () => {
+    setCurrentPage('landing');
+    setSelectedProductId(null);
+    window.history.replaceState({}, '', '/');
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
@@ -39,19 +72,17 @@ function AppContent() {
       setCurrentPage('login');
       return;
     }
-    checkoutKeyRef.current += 1;
-    setSelectedProductId(productId);
-    setCurrentPage('checkout');
+    navigateToCheckout(productId);
   };
 
   const handleCheckoutBack = () => {
-    setCurrentPage('landing');
-    setSelectedProductId(null);
+    navigateToStore();
   };
 
   const handleCheckoutSuccess = () => {
     setCurrentPage('dashboard');
     setSelectedProductId(null);
+    window.history.replaceState({}, '', '/');
   };
 
   const handleSignOut = async () => {
@@ -65,7 +96,7 @@ function AppContent() {
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           <button
-            onClick={() => setCurrentPage('landing')}
+            onClick={() => { setCurrentPage('landing'); setSelectedProductId(null); window.history.replaceState({}, '', '/'); }}
             className="text-2xl font-bold text-white hover:text-blue-400 transition-colors"
           >
             King Vypers
