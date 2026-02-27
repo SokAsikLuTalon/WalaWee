@@ -287,12 +287,16 @@ app.post('/api/orders', requireAuth, async (req, res) => {
       }),
     });
 
+    const responseBody = await temanRes.json().catch(() => ({}));
+
     if (!temanRes.ok) {
       await pool.query("UPDATE orders SET payment_status = 'failed' WHERE id = $1", [order.id]);
-      return res.status(500).json({ error: 'Failed to create payment' });
+      const msg = responseBody.message || responseBody.error || responseBody.msg || 'TemanQRIS menolak request';
+      console.error('TemanQRIS error:', temanRes.status, responseBody);
+      return res.status(500).json({ error: `Gagal buat pembayaran: ${msg}` });
     }
 
-    const paymentData = await temanRes.json();
+    const paymentData = responseBody;
     await pool.query(
       'UPDATE orders SET payment_id = $1, qris_url = $2 WHERE id = $3',
       [paymentData.payment_id, paymentData.qris_url, order.id]
