@@ -258,6 +258,9 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
                     >
                       Buka Halaman Pembayaran →
                     </a>
+                    <p className="text-amber-400/90 text-xs mt-2">
+                      Link ini sekali pakai. Untuk pembelian berikutnya, kembali ke beranda lalu pilih produk dan klik Proceed to Payment lagi.
+                    </p>
                   </div>
                 ) : null}
                 <div className="text-gray-400 text-sm">
@@ -282,14 +285,19 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
                 </div>
               </div>
             ) : (
-              <button
-                onClick={handleCheckout}
-                disabled={processing || (product.stock_count || 0) < quantity}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                <CreditCard className="w-5 h-5" />
-                {processing ? 'Processing...' : 'Proceed to Payment'}
-              </button>
+              <div className="space-y-3">
+                <p className="text-gray-400 text-xs">
+                  Setiap pembelian memakai link pembayaran baru (link TemanQRIS sekali pakai). Klik tombol di bawah untuk buat link untuk order ini.
+                </p>
+                <button
+                  onClick={handleCheckout}
+                  disabled={processing || (product.stock_count || 0) < quantity}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <CreditCard className="w-5 h-5" />
+                  {processing ? 'Processing...' : 'Proceed to Payment'}
+                </button>
+              </div>
             )}
           </div>
         </div>

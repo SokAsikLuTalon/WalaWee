@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginPage, RegisterPage } from './components/AuthPages';
 import { StoreLanding } from './components/StoreLanding';
@@ -24,6 +24,7 @@ function AppContent() {
   const [currentPage, setCurrentPage] = useState<Page>('landing');
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const checkoutKeyRef = useRef(0);
 
   if (loading) {
     return (
@@ -38,6 +39,7 @@ function AppContent() {
       setCurrentPage('login');
       return;
     }
+    checkoutKeyRef.current += 1;
     setSelectedProductId(productId);
     setCurrentPage('checkout');
   };
@@ -251,6 +253,7 @@ function AppContent() {
   if (user && currentPage === 'checkout' && selectedProductId) {
     return (
       <CheckoutPage
+        key={`checkout-${checkoutKeyRef.current}`}
         productId={selectedProductId}
         onBack={handleCheckoutBack}
         onSuccess={handleCheckoutSuccess}
