@@ -23,6 +23,9 @@ const sessionStore = new pgStore({ pool, createTableIfMissing: true });
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Wajib di Railway/proxy: supaya cookie Secure & session jalan
+app.set('trust proxy', 1);
+
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173', credentials: true }));
 app.use(cookieParser());
 
