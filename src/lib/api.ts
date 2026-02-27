@@ -80,21 +80,26 @@ export const api = {
       }),
   },
   orders: {
-    create: (product_id: string) =>
+    create: (product_id: string, quantity?: number) =>
       request<{
         success?: boolean;
         order_id: string;
         qris_url?: string;
         payment_link?: string;
         amount: number;
+        quantity?: number;
       }>('/api/orders', {
         method: 'POST',
-        body: JSON.stringify({ product_id }),
+        body: JSON.stringify({ product_id, quantity: quantity ?? 1 }),
       }),
     get: (id: string) =>
-      request<{ id: string; payment_status: string; key_id: string | null; paid_at: string | null }>(
-        `/api/orders/${id}`
-      ),
+      request<{
+        id: string;
+        payment_status: string;
+        key_id: string | null;
+        paid_at: string | null;
+        quantity?: number;
+      }>(`/api/orders/${id}`),
   },
   admin: {
     stats: () =>

@@ -306,9 +306,8 @@ Agar webhook **payment.confirmed** dari TemanQRIS bisa diverifikasi oleh server 
 2. Cari menu **Settings** atau **Pengaturan** (biasanya di sidebar atau ikon gear).
 3. Di dalam Settings, cari bagian **Webhook** atau **API / Integrasi**.
 4. Akan ada:
-   - **Webhook URL** — isi dengan URL endpoint kamu:  
-     `https://NAMA-APP-KAMU.up.railway.app/api/webhooks/temanqris`  
-     (ganti `NAMA-APP-KAMU` dengan domain Railway kamu, misalnya `king-vypers-production-xxxx`.)
+   - **Webhook URL** — isi dengan **link Railway kamu yang asli** (bukan teks NAMA-APP-KAMU). Ambil dari Railway: service app → Settings → Domains → copy URL (misalnya `https://king-vypers-production-abc12.up.railway.app`), lalu tambahkan `/api/webhooks/temanqris`. Jadi isiannya contoh:  
+     `https://king-vypers-production-abc12.up.railway.app/api/webhooks/temanqris`
    - **Webhook Secret** — ini yang dipakai untuk tanda tangan (signature).  
      - Kalau sudah ada secret: **copy** dan simpan (kita pakai ini di Railway).  
      - Kalau belum ada / mau ganti: biasanya ada tombol **"Generate"** atau **"Buat Secret"**. Klik → copy secret yang muncul (simpan di tempat aman, biasanya cuma ditampilkan sekali).
@@ -386,11 +385,11 @@ Agar pembayaran QRIS bisa otomatis mengaktifkan key, TemanQRIS harus bisa panggi
 
 1. Login ke **dashboard TemanQRIS**.
 2. Cari bagian **Webhook** / **Callback URL** (biasanya di **Settings**).
-3. Isi **Webhook URL** dengan:
+3. Isi **Webhook URL** dengan **link Railway kamu** (bukan teks placeholder). Contoh: kalau di Railway domain app kamu `https://king-vypers-production-abc12.up.railway.app`, isi:
    ```
-   https://NAMA-DOMAIN-KAMU.up.railway.app/api/webhooks/temanqris
+   https://king-vypers-production-abc12.up.railway.app/api/webhooks/temanqris
    ```
-   Ganti `NAMA-DOMAIN-KAMU` dengan domain yang Railway kasih (misalnya `king-vypers-production-xxxx`).
+   Ambil URL domain dari Railway: service app → Settings → Domains.
 4. Untuk **Webhook Secret**: harus **sama persis** dengan `TEMANQRIS_WEBHOOK_SECRET` di Railway. Panduan detail ada di **Bagian 11**.
 5. Simpan pengaturan di TemanQRIS.
 

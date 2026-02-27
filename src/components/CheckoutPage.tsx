@@ -22,11 +22,13 @@ const POLL_INTERVAL_MS = 2500;
 export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps) {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
+  const [quantity, setQuantity] = useState(1);
   const [processing, setProcessing] = useState(false);
   const [qrisUrl, setQrisUrl] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'pending' | 'success'>('idle');
   const [purchasedKey, setPurchasedKey] = useState<string | null>(null);
+  const [purchasedQuantity, setPurchasedQuantity] = useState(1);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -41,6 +43,7 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
         const order = await api.orders.get(orderId);
         if (order.payment_status === 'paid' && order.key_id) {
           setPaymentStatus('success');
+          setPurchasedQuantity(order.quantity ?? 1);
           const keyData = await api.keys.getById(order.key_id);
           setPurchasedKey(keyData.key_code);
           if (pollRef.current) {
@@ -65,7 +68,7 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
 
     setProcessing(true);
     try {
-      const result = await api.orders.create(product.id);
+      const result = await api.orders.create(product.id, quantity);
       const orderId = result?.order_id;
       const displayUrl = typeof result?.qris_url === 'string' && result.qris_url
         ? result.qris_url
@@ -103,6 +106,7 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
   }
 
   if (paymentStatus === 'success' && purchasedKey) {
+    const isMultiple = purchasedQuantity > 1;
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center p-4">
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-8 max-w-md w-full text-center">
@@ -111,16 +115,24 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
           </div>
 
           <h2 className="text-3xl font-bold text-white mb-4">Payment Successful!</h2>
-          <p className="text-gray-400 mb-6">Your premium key has been activated</p>
+          <p className="text-gray-400 mb-6">
+            {isMultiple
+              ? `${purchasedQuantity} premium keys have been added to your account.`
+              : 'Your premium key has been activated'}
+          </p>
 
-          <div className="bg-gray-900 border border-gray-700 rounded-lg p-6 mb-6">
-            <div className="text-gray-400 text-sm mb-2">Your Key Code</div>
-            <code className="text-2xl font-mono font-bold text-blue-400">{purchasedKey}</code>
-          </div>
+          {!isMultiple && (
+            <div className="bg-gray-900 border border-gray-700 rounded-lg p-6 mb-6">
+              <div className="text-gray-400 text-sm mb-2">Your Key Code</div>
+              <code className="text-2xl font-mono font-bold text-blue-400">{purchasedKey}</code>
+            </div>
+          )}
 
           <div className="bg-blue-500/10 border border-blue-500 rounded-lg p-4 mb-6">
             <p className="text-blue-400 text-sm">
-              Please save this key code securely. You can also view it in your dashboard.
+              {isMultiple
+                ? 'Semua key bisa dilihat di My Keys.'
+                : 'Please save this key code securely. You can also view it in your dashboard.'}
             </p>
           </div>
 
@@ -162,10 +174,37 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
                 <span className="text-gray-400">Duration</span>
                 <span className="text-white font-semibold">{product.duration_days} days</span>
               </div>
+              <div className="flex items-center justify-between gap-4 mb-2">
+                <span className="text-gray-400">Quantity</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    className="w-10 h-10 rounded-lg bg-gray-700 hover:bg-gray-600 text-white font-bold text-lg flex items-center justify-center disabled:opacity-50 disabled:pointer-events-none"
+                    disabled={quantity <= 1}
+                  >
+                    −
+                  </button>
+                  <span className="text-white font-semibold w-8 text-center">{quantity}</span>
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => Math.min(q + 1, 20, product.stock_count ?? 20))}
+                    className="w-10 h-10 rounded-lg bg-gray-700 hover:bg-gray-600 text-white font-bold text-lg flex items-center justify-center disabled:opacity-50 disabled:pointer-events-none"
+                    disabled={quantity >= Math.min(20, product.stock_count ?? 0)}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
               <div className="flex justify-between mb-4">
                 <span className="text-gray-400">Price</span>
                 <span className="text-white font-semibold text-xl">
-                  IDR {product.price.toLocaleString()}
+                  IDR {(product.price * quantity).toLocaleString()}
+                  {quantity > 1 && (
+                    <span className="text-gray-400 text-sm font-normal ml-1">
+                      ({product.price.toLocaleString()} × {quantity})
+                    </span>
+                  )}
                 </span>
               </div>
             </div>
@@ -216,7 +255,7 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
             ) : (
               <button
                 onClick={handleCheckout}
-                disabled={processing || product.stock_count === 0}
+                disabled={processing || (product.stock_count || 0) < quantity}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
               >
                 <CreditCard className="w-5 h-5" />

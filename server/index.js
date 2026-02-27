@@ -57,36 +57,46 @@ app.post('/api/webhooks/temanqris', express.raw({ type: 'application/json' }), a
   }
   try {
     const orderRes = await pool.query(
-      `SELECT o.id, o.user_id, o.product_id, p.duration_days
+      `SELECT o.id, o.user_id, o.product_id, p.duration_days, COALESCE(o.quantity, 1) AS quantity
        FROM orders o JOIN products p ON o.product_id = p.id
-       WHERE (o.temanqris_order_id = $1 OR o.id::text = $1) AND o.payment_status = 'pending'`,
+       WHERE (o.temanqris_order_id = $1 OR o.payment_id = $1 OR o.id::text = $1) AND o.payment_status = 'pending'`,
       [orderId]
     );
     const order = orderRes.rows[0];
     if (!order) return res.status(404).json({ error: 'Order not found' });
-    const keyRes = await pool.query(
-      `SELECT id, key_code FROM keys
-       WHERE product_id = $1 AND status = 'active' AND user_id IS NULL LIMIT 1`,
-      [order.product_id]
-    );
-    const key = keyRes.rows[0];
-    if (!key) {
-      await pool.query("UPDATE orders SET payment_status = 'failed' WHERE id = $1", [order.id]);
-      return res.status(400).json({ error: 'No available keys' });
-    }
+    const qty = Math.max(1, parseInt(order.quantity, 10) || 1);
+
     const userRes = await pool.query('SELECT display_name FROM users WHERE id = $1', [order.user_id]);
     const userName = userRes.rows[0]?.display_name || 'Unknown';
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + order.duration_days);
-    await pool.query(
-      `UPDATE keys SET status = 'used', user_id = $1, user_name = $2, activated_at = NOW(), expires_at = $3 WHERE id = $4`,
-      [order.user_id, userName, expiresAt, key.id]
-    );
+
+    const assignedKeys = [];
+    let firstKeyId = null;
+    for (let i = 0; i < qty; i++) {
+      const keyRes = await pool.query(
+        `SELECT id, key_code FROM keys
+         WHERE product_id = $1 AND status = 'active' AND user_id IS NULL LIMIT 1`,
+        [order.product_id]
+      );
+      const key = keyRes.rows[0];
+      if (!key) {
+        await pool.query("UPDATE orders SET payment_status = 'failed' WHERE id = $1", [order.id]);
+        return res.status(400).json({ error: `No available keys (need ${qty}, got ${assignedKeys.length})` });
+      }
+      await pool.query(
+        `UPDATE keys SET status = 'used', user_id = $1, user_name = $2, activated_at = NOW(), expires_at = $3 WHERE id = $4`,
+        [order.user_id, userName, expiresAt, key.id]
+      );
+      assignedKeys.push(key.key_code);
+      if (!firstKeyId) firstKeyId = key.id;
+    }
+
     await pool.query(
       "UPDATE orders SET payment_status = 'paid', key_id = $1, paid_at = NOW() WHERE id = $2",
-      [key.id, order.id]
+      [firstKeyId, order.id]
     );
-    return res.json({ success: true, message: 'Payment processed', key_code: key.key_code });
+    return res.json({ success: true, message: 'Payment processed', key_codes: assignedKeys });
   } catch (e) {
     console.error('Webhook error:', e);
     return res.status(500).json({ error: 'Internal server error' });
@@ -257,8 +267,9 @@ function generateShortOrderId() {
 
 app.post('/api/orders', requireAuth, async (req, res) => {
   try {
-    const { product_id: productId } = req.body;
+    const { product_id: productId, quantity: reqQty } = req.body;
     if (!productId) return res.status(400).json({ error: 'product_id required' });
+    const quantity = Math.min(20, Math.max(1, parseInt(reqQty, 10) || 1));
 
     const productRes = await pool.query(
       'SELECT id, name, price, stock_count, duration_days FROM products WHERE id = $1',
@@ -266,14 +277,15 @@ app.post('/api/orders', requireAuth, async (req, res) => {
     );
     const product = productRes.rows[0];
     if (!product) return res.status(404).json({ error: 'Product not found' });
-    if (product.stock_count <= 0) return res.status(400).json({ error: 'Product out of stock' });
+    if (product.stock_count < quantity) return res.status(400).json({ error: `Product out of stock (need ${quantity}, have ${product.stock_count})` });
 
     const shortOrderId = generateShortOrderId();
+    const amount = product.price * quantity;
 
     const orderRes = await pool.query(
-      `INSERT INTO orders (user_id, product_id, amount, payment_status, temanqris_order_id)
-       VALUES ($1, $2, $3, 'pending', $4) RETURNING id, amount, payment_status`,
-      [req.session.userId, product.id, product.price, shortOrderId]
+      `INSERT INTO orders (user_id, product_id, amount, quantity, payment_status, temanqris_order_id)
+       VALUES ($1, $2, $3, $4, 'pending', $5) RETURNING id, amount, quantity, payment_status`,
+      [req.session.userId, product.id, amount, quantity, shortOrderId]
     );
     const order = orderRes.rows[0];
 
@@ -295,8 +307,8 @@ app.post('/api/orders', requireAuth, async (req, res) => {
     const callbackUrl = isValidBaseUrl(baseUrl) ? `${baseUrl}/checkout?order=${order.id}` : null;
 
     const body = {
-      amount: product.price,
-      description: `${product.name} - King Vypers Premium Key`,
+      amount: amount,
+      description: quantity > 1 ? `${product.name} x ${quantity} - King Vypers Premium Key` : `${product.name} - King Vypers Premium Key`,
       order_id: shortOrderId,
     };
     if (webhookUrl) body.webhook_url = webhookUrl;
@@ -348,7 +360,8 @@ app.post('/api/orders', requireAuth, async (req, res) => {
       payment_id: (pl && pl.order_id) || paymentData.order_id || order.id,
       qris_url: qrisUrlValue || undefined,
       payment_link: paymentLinkUrl || qrisUrlValue || undefined,
-      amount: product.price,
+      amount: amount,
+      quantity,
     });
   } catch (e) {
     console.error(e);
@@ -360,7 +373,7 @@ app.post('/api/orders', requireAuth, async (req, res) => {
 app.get('/api/orders/:id', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT id, payment_status, key_id, paid_at FROM orders WHERE id = $1 AND user_id = $2',
+      'SELECT id, payment_status, key_id, paid_at, quantity FROM orders WHERE id = $1 AND user_id = $2',
       [req.params.id, req.session.userId]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Order not found' });
