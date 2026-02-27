@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginPage, RegisterPage } from './components/AuthPages';
 import { StoreLanding } from './components/StoreLanding';
 import { CheckoutPage } from './components/CheckoutPage';
+import { ThanksPage } from './components/ThanksPage';
 import { UserDashboard } from './components/UserDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AdminKeys } from './components/AdminKeys';
@@ -14,6 +15,7 @@ type Page =
   | 'login'
   | 'register'
   | 'checkout'
+  | 'thanks'
   | 'dashboard'
   | 'admin-dashboard'
   | 'admin-keys'
@@ -36,6 +38,9 @@ function AppContent() {
         checkoutKeyRef.current += 1;
         setCurrentPage('checkout');
         setSelectedProductId(productIdFromUrl);
+      } else if (path === '/thanks') {
+        setCurrentPage('thanks');
+        setSelectedProductId(null);
       } else if (path === '/' || path === '') {
         setCurrentPage('landing');
         setSelectedProductId(null);
@@ -45,6 +50,14 @@ function AppContent() {
     window.addEventListener('popstate', syncFromUrl);
     return () => window.removeEventListener('popstate', syncFromUrl);
   }, []);
+
+  useEffect(() => {
+    if (loading || user) return;
+    if (typeof window !== 'undefined' && window.location.pathname === '/thanks') {
+      window.history.replaceState({}, '', '/');
+      setCurrentPage('landing');
+    }
+  }, [loading, user]);
 
   const navigateToCheckout = (productId: string) => {
     checkoutKeyRef.current += 1;
@@ -81,6 +94,12 @@ function AppContent() {
 
   const handleCheckoutSuccess = () => {
     setCurrentPage('dashboard');
+    setSelectedProductId(null);
+    window.history.replaceState({}, '', '/');
+  };
+
+  const goHome = () => {
+    setCurrentPage('landing');
     setSelectedProductId(null);
     window.history.replaceState({}, '', '/');
   };
@@ -277,6 +296,15 @@ function AppContent() {
       <>
         <NavBar />
         <UserDashboard />
+      </>
+    );
+  }
+
+  if (user && currentPage === 'thanks') {
+    return (
+      <>
+        <NavBar />
+        <ThanksPage onGoHome={goHome} onGoToKeys={() => setCurrentPage('dashboard')} />
       </>
     );
   }

@@ -379,19 +379,27 @@ Kalau key tidak muncul setelah kamu verify:
 
 ---
 
-## Bagian 7: Set webhook TemanQRIS
+## Bagian 7: Set webhook & callback di TemanQRIS
 
-Agar pembayaran QRIS bisa otomatis mengaktifkan key, TemanQRIS harus bisa panggil backend kamu.
+Agar pembayaran QRIS bisa otomatis mengaktifkan key, set dua URL di dashboard TemanQRIS (biasanya di **Settings**):
 
-1. Login ke **dashboard TemanQRIS**.
-2. Cari bagian **Webhook** / **Callback URL** (biasanya di **Settings**).
-3. Isi **Webhook URL** dengan **link Railway kamu** (bukan teks placeholder). Contoh: kalau di Railway domain app kamu `https://king-vypers-production-abc12.up.railway.app`, isi:
+1. **Webhook URL** (notifikasi server-to-server, POST)  
+   Isi dengan **link Railway kamu** + `/api/webhooks/temanqris`. Contoh:
    ```
-   https://king-vypers-production-abc12.up.railway.app/api/webhooks/temanqris
+   https://walawee-production.up.railway.app/api/webhooks/temanqris
    ```
-   Ambil URL domain dari Railway: service app → Settings → Domains.
-4. Untuk **Webhook Secret**: harus **sama persis** dengan `TEMANQRIS_WEBHOOK_SECRET` di Railway. Panduan detail ada di **Bagian 11**.
-5. Simpan pengaturan di TemanQRIS.
+   Ganti dengan domain app kamu dari Railway → Settings → Domains.
+
+2. **Callback / Redirect URL** (redirect user setelah sukses bayar)  
+   Isi dengan **link Railway kamu** + `/thanks`. Contoh:
+   ```
+   https://walawee-production.up.railway.app/thanks
+   ```
+   Setelah customer bayar dan merchant verify, customer bisa diarahkan ke halaman terima kasih ini.
+
+3. **Webhook Secret** — harus **sama persis** dengan `TEMANQRIS_WEBHOOK_SECRET` di Railway. Panduan detail ada di **Bagian 11**.
+
+4. Simpan pengaturan di TemanQRIS.
 
 ---
 

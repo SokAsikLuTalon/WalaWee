@@ -304,7 +304,7 @@ app.post('/api/orders', requireAuth, async (req, res) => {
       : isValidHttps(baseUrl)
         ? `${baseUrl}/api/webhooks/temanqris`
         : null;
-    const callbackUrl = isValidBaseUrl(baseUrl) ? `${baseUrl}/` : null;
+    const callbackUrl = isValidBaseUrl(baseUrl) ? `${baseUrl}/thanks` : null;
 
     const body = {
       amount: amount,
