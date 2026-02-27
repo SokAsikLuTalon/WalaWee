@@ -1,0 +1,7 @@
+# Build: generate static files
+[build]
+buildCommand = "npm run build"
+
+# Start: serve the dist folder (SPA mode)
+[deploy]
+startCommand = "npm start"
