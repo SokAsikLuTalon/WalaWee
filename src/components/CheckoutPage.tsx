@@ -71,11 +71,13 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
       setPaymentStatus('pending');
     } catch (error: unknown) {
       console.error('Error creating payment:', error);
-      alert(error instanceof Error ? error.message : 'Failed to create payment');
+      alert(error instanceof Error ? error.message : 'Gagal buat pembayaran');
     } finally {
       setProcessing(false);
     }
   };
+
+  const isQrImage = qrisUrl?.startsWith('data:') ?? false;
 
   if (loading) {
     return (
@@ -164,11 +166,25 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
             {qrisUrl ? (
               <div className="text-center space-y-4">
                 <div className="text-white font-semibold">Scan QR Code to Pay</div>
-                <img
-                  src={qrisUrl}
-                  alt="QRIS Payment"
-                  className="mx-auto max-w-sm bg-white p-4 rounded-lg"
-                />
+                {isQrImage ? (
+                  <img
+                    src={qrisUrl}
+                    alt="QRIS Payment"
+                    className="mx-auto max-w-sm bg-white p-4 rounded-lg"
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-gray-400 text-sm">Buka halaman pembayaran lalu scan QR di sana:</p>
+                    <a
+                      href={qrisUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg"
+                    >
+                      Buka Halaman Pembayaran →
+                    </a>
+                  </div>
+                )}
                 <div className="text-gray-400 text-sm">
                   Waiting for payment confirmation...
                 </div>

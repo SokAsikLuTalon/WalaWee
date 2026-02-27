@@ -273,17 +273,22 @@ app.post('/api/orders', requireAuth, async (req, res) => {
       return res.status(500).json({ error: 'Payment provider not configured' });
     }
 
-    const temanRes = await fetch('https://temanqris.com/api/create-payment', {
+    const baseUrl = process.env.FRONTEND_ORIGIN || process.env.BASE_URL || '';
+    const webhookUrl = baseUrl ? `${baseUrl.replace(/\/$/, '')}/api/webhooks/temanqris` : '';
+    const callbackUrl = baseUrl ? `${baseUrl.replace(/\/$/, '')}/checkout?order=${order.id}` : '';
+
+    const temanRes = await fetch('https://temanqris.com/api/qris/payment-link', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${temanqrisApiKey}`,
+        'X-API-Key': temanqrisApiKey,
       },
       body: JSON.stringify({
         amount: product.price,
-        order_id: order.id,
-        customer_name: req.session.email,
         description: `${product.name} - King Vypers Premium Key`,
+        order_id: String(order.id),
+        webhook_url: webhookUrl || undefined,
+        callback_url: callbackUrl || undefined,
       }),
     });
 
@@ -297,16 +302,21 @@ app.post('/api/orders', requireAuth, async (req, res) => {
     }
 
     const paymentData = responseBody;
+    const qrisImage = paymentData.qr_image || paymentData.qris_image || paymentData.qr_image_url;
+    const paymentLink = paymentData.payment_link || paymentData.link || paymentData.url;
+    const qrisUrl = qrisImage || paymentLink || '';
+
     await pool.query(
       'UPDATE orders SET payment_id = $1, qris_url = $2 WHERE id = $3',
-      [paymentData.payment_id, paymentData.qris_url, order.id]
+      [paymentData.order_id || paymentData.id || order.id, qrisUrl, order.id]
     );
 
     return res.json({
       success: true,
       order_id: order.id,
-      payment_id: paymentData.payment_id,
-      qris_url: paymentData.qris_url,
+      payment_id: paymentData.order_id || paymentData.id,
+      qris_url: qrisUrl,
+      payment_link: paymentLink || qrisUrl,
       amount: product.price,
     });
   } catch (e) {
