@@ -31,6 +31,20 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
   const [purchasedQuantity, setPurchasedQuantity] = useState(1);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Setiap kali user masuk halaman checkout = niat belanja baru → reset state pembayaran (termasuk kalau produk sama)
+  useEffect(() => {
+    setOrderId(null);
+    setPaymentStatus('idle');
+    setPurchasedKey(null);
+    setQrisUrl(null);
+    setQuantity(1);
+    setPurchasedQuantity(1);
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     setLoading(true);
     api.products.get(productId).then(setProduct).catch(() => setProduct(null)).finally(() => setLoading(false));
