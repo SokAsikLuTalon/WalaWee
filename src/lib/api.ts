@@ -82,9 +82,10 @@ export const api = {
   orders: {
     create: (product_id: string) =>
       request<{
-        success: boolean;
+        success?: boolean;
         order_id: string;
-        qris_url: string;
+        qris_url?: string;
+        payment_link?: string;
         amount: number;
       }>('/api/orders', {
         method: 'POST',

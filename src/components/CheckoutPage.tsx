@@ -66,9 +66,15 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
     setProcessing(true);
     try {
       const result = await api.orders.create(product.id);
-      setQrisUrl(result.qris_url);
-      setOrderId(result.order_id);
+      const orderId = result?.order_id;
+      const displayUrl = typeof result?.qris_url === 'string' && result.qris_url
+        ? result.qris_url
+        : typeof result?.payment_link === 'string' && result.payment_link
+          ? result.payment_link
+          : null;
+      if (orderId) setOrderId(orderId);
       setPaymentStatus('pending');
+      setQrisUrl(displayUrl || null);
     } catch (error: unknown) {
       console.error('Error creating payment:', error);
       alert(error instanceof Error ? error.message : 'Gagal buat pembayaran');
@@ -77,7 +83,8 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
     }
   };
 
-  const isQrImage = qrisUrl?.startsWith('data:') ?? false;
+  const isQrImage = typeof qrisUrl === 'string' && qrisUrl.startsWith('data:');
+  const hasPaymentLink = typeof qrisUrl === 'string' && qrisUrl.length > 0 && (qrisUrl.startsWith('http://') || qrisUrl.startsWith('https://'));
 
   if (loading) {
     return (
@@ -172,7 +179,7 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
                     alt="QRIS Payment"
                     className="mx-auto max-w-sm bg-white p-4 rounded-lg"
                   />
-                ) : (
+                ) : hasPaymentLink ? (
                   <div className="space-y-2">
                     <p className="text-gray-400 text-sm">Buka halaman pembayaran lalu scan QR di sana:</p>
                     <a
@@ -184,10 +191,22 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
                       Buka Halaman Pembayaran →
                     </a>
                   </div>
-                )}
+                ) : null}
                 <div className="text-gray-400 text-sm">
                   Waiting for payment confirmation...
                 </div>
+                <div className="animate-pulse flex justify-center">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full mx-1"></div>
+                  <div className="w-2 h-2 bg-blue-500 rounded-full mx-1"></div>
+                  <div className="w-2 h-2 bg-blue-500 rounded-full mx-1"></div>
+                </div>
+              </div>
+            ) : paymentStatus === 'pending' && orderId ? (
+              <div className="text-center space-y-4 py-6">
+                <div className="text-white font-semibold">Pembayaran berhasil dibuat</div>
+                <p className="text-gray-400 text-sm">
+                  Cek status di My Keys setelah kamu selesai bayar. Halaman akan otomatis update saat pembayaran terkonfirmasi.
+                </p>
                 <div className="animate-pulse flex justify-center">
                   <div className="w-2 h-2 bg-blue-500 rounded-full mx-1"></div>
                   <div className="w-2 h-2 bg-blue-500 rounded-full mx-1"></div>

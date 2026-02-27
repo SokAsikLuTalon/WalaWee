@@ -29,7 +29,7 @@ app.set('trust proxy', 1);
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173', credentials: true }));
 app.use(cookieParser());
 
-// Webhook must read raw body for signature verification - register before express.json()
+// Webhook TemanQRIS - sesuai https://temanqris.com/docs (format signature sha256=... dan event payment.confirmed)
 app.post('/api/webhooks/temanqris', express.raw({ type: 'application/json' }), async (req, res) => {
   const signature = req.headers['x-temanqris-signature'];
   const secret = process.env.TEMANQRIS_WEBHOOK_SECRET;
@@ -38,27 +38,29 @@ app.post('/api/webhooks/temanqris', express.raw({ type: 'application/json' }), a
   }
   const rawBody = (req.body && Buffer.isBuffer(req.body) ? req.body.toString('utf8') : String(req.body || ''));
   const crypto = await import('crypto');
-  const hmac = crypto.createHmac('sha256', secret);
-  hmac.update(rawBody);
-  const expected = hmac.digest('hex');
+  const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
   if (signature !== expected) {
     return res.status(401).json({ error: 'Invalid signature' });
   }
-  let data;
+  let payload;
   try {
-    data = JSON.parse(rawBody);
+    payload = JSON.parse(rawBody);
   } catch {
     return res.status(400).json({ error: 'Invalid JSON' });
   }
-  if (data.status !== 'paid') {
-    return res.json({ message: 'Payment not completed' });
+  if (payload.event !== 'payment.confirmed') {
+    return res.json({ message: 'Event ignored', event: payload.event });
+  }
+  const orderId = payload.data?.order_id;
+  if (!orderId) {
+    return res.status(400).json({ error: 'Missing order_id in webhook data' });
   }
   try {
     const orderRes = await pool.query(
       `SELECT o.id, o.user_id, o.product_id, p.duration_days
        FROM orders o JOIN products p ON o.product_id = p.id
        WHERE (o.temanqris_order_id = $1 OR o.id::text = $1) AND o.payment_status = 'pending'`,
-      [data.order_id]
+      [orderId]
     );
     const order = orderRes.rows[0];
     if (!order) return res.status(404).json({ error: 'Order not found' });
@@ -281,9 +283,24 @@ app.post('/api/orders', requireAuth, async (req, res) => {
       return res.status(500).json({ error: 'Payment provider not configured' });
     }
 
-    const baseUrl = process.env.FRONTEND_ORIGIN || process.env.BASE_URL || '';
-    const webhookUrl = baseUrl ? `${baseUrl.replace(/\/$/, '')}/api/webhooks/temanqris` : '';
-    const callbackUrl = baseUrl ? `${baseUrl.replace(/\/$/, '')}/checkout?order=${order.id}` : '';
+    const baseUrl = (process.env.FRONTEND_ORIGIN || process.env.BASE_URL || '').trim().replace(/\/$/, '');
+    const isValidHttps = (u) => typeof u === 'string' && u.length > 0 && u.startsWith('https://') && !u.includes(' ') && !u.includes('?') && !u.includes('#');
+    const isValidBaseUrl = (u) => typeof u === 'string' && u.length > 0 && u.startsWith('https://') && !u.includes(' ');
+    const explicitWebhook = (process.env.TEMANQRIS_WEBHOOK_URL || '').trim();
+    const webhookUrl = isValidHttps(explicitWebhook)
+      ? explicitWebhook
+      : isValidHttps(baseUrl)
+        ? `${baseUrl}/api/webhooks/temanqris`
+        : null;
+    const callbackUrl = isValidBaseUrl(baseUrl) ? `${baseUrl}/checkout?order=${order.id}` : null;
+
+    const body = {
+      amount: product.price,
+      description: `${product.name} - King Vypers Premium Key`,
+      order_id: shortOrderId,
+    };
+    if (webhookUrl) body.webhook_url = webhookUrl;
+    if (callbackUrl) body.callback_url = callbackUrl;
 
     const temanRes = await fetch('https://temanqris.com/api/qris/payment-link', {
       method: 'POST',
@@ -291,13 +308,7 @@ app.post('/api/orders', requireAuth, async (req, res) => {
         'Content-Type': 'application/json',
         'X-API-Key': temanqrisApiKey,
       },
-      body: JSON.stringify({
-        amount: product.price,
-        description: `${product.name} - King Vypers Premium Key`,
-        order_id: shortOrderId,
-        webhook_url: webhookUrl || undefined,
-        callback_url: callbackUrl || undefined,
-      }),
+      body: JSON.stringify(body),
     });
 
     const responseBody = await temanRes.json().catch(() => ({}));
@@ -310,21 +321,33 @@ app.post('/api/orders', requireAuth, async (req, res) => {
     }
 
     const paymentData = responseBody;
-    const qrisImage = paymentData.qr_image || paymentData.qris_image || paymentData.qr_image_url;
-    const paymentLink = paymentData.payment_link || paymentData.link || paymentData.url;
-    const qrisUrl = qrisImage || paymentLink || '';
+    const pl = paymentData.payment_link;
+    const baseTemanQris = 'https://temanqris.com';
+    let qrisUrlValue = '';
+    let paymentLinkUrl = '';
+    if (pl && typeof pl === 'object' && pl.url) {
+      paymentLinkUrl = pl.url.startsWith('http') ? pl.url : `${baseTemanQris}${pl.url.startsWith('/') ? '' : '/'}${pl.url}`;
+      qrisUrlValue = paymentLinkUrl;
+    }
+    if (!qrisUrlValue && (paymentData.qr_image || paymentData.qris_image)) {
+      qrisUrlValue = (paymentData.qr_image || paymentData.qris_image || '').trim();
+    }
+    if (!qrisUrlValue && paymentData.payment_link) {
+      const plAlt = paymentData.payment_link;
+      if (typeof plAlt === 'string') qrisUrlValue = plAlt;
+    }
 
     await pool.query(
       'UPDATE orders SET payment_id = $1, qris_url = $2 WHERE id = $3',
-      [paymentData.order_id || paymentData.id || order.id, qrisUrl, order.id]
+      [paymentData.order_id || (pl && pl.order_id) || order.id, qrisUrlValue, order.id]
     );
 
     return res.json({
       success: true,
       order_id: order.id,
-      payment_id: paymentData.order_id || paymentData.id,
-      qris_url: qrisUrl,
-      payment_link: paymentLink || qrisUrl,
+      payment_id: (pl && pl.order_id) || paymentData.order_id || order.id,
+      qris_url: qrisUrlValue || undefined,
+      payment_link: paymentLinkUrl || qrisUrlValue || undefined,
       amount: product.price,
     });
   } catch (e) {
