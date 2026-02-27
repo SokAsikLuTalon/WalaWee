@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS orders (
   payment_status text NOT NULL DEFAULT 'pending',
   payment_id text,
   qris_url text,
+  temanqris_order_id varchar(30) UNIQUE,
   created_at timestamptz DEFAULT now(),
   paid_at timestamptz,
   CONSTRAINT valid_payment_status CHECK (payment_status IN ('pending', 'paid', 'failed', 'expired'))

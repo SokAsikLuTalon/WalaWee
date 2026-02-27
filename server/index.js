@@ -57,7 +57,7 @@ app.post('/api/webhooks/temanqris', express.raw({ type: 'application/json' }), a
     const orderRes = await pool.query(
       `SELECT o.id, o.user_id, o.product_id, p.duration_days
        FROM orders o JOIN products p ON o.product_id = p.id
-       WHERE o.id = $1 AND o.payment_status = 'pending'`,
+       WHERE (o.temanqris_order_id = $1 OR o.id::text = $1) AND o.payment_status = 'pending'`,
       [data.order_id]
     );
     const order = orderRes.rows[0];
@@ -247,6 +247,12 @@ app.get('/api/keys', requireAuth, async (req, res) => {
 });
 
 // --- User: create order (create payment) ---
+function generateShortOrderId() {
+  const t = Date.now().toString(36);
+  const r = Math.random().toString(36).slice(2, 10);
+  return `KV${t}${r}`.slice(0, 30);
+}
+
 app.post('/api/orders', requireAuth, async (req, res) => {
   try {
     const { product_id: productId } = req.body;
@@ -260,10 +266,12 @@ app.post('/api/orders', requireAuth, async (req, res) => {
     if (!product) return res.status(404).json({ error: 'Product not found' });
     if (product.stock_count <= 0) return res.status(400).json({ error: 'Product out of stock' });
 
+    const shortOrderId = generateShortOrderId();
+
     const orderRes = await pool.query(
-      `INSERT INTO orders (user_id, product_id, amount, payment_status)
-       VALUES ($1, $2, $3, 'pending') RETURNING id, amount, payment_status`,
-      [req.session.userId, product.id, product.price]
+      `INSERT INTO orders (user_id, product_id, amount, payment_status, temanqris_order_id)
+       VALUES ($1, $2, $3, 'pending', $4) RETURNING id, amount, payment_status`,
+      [req.session.userId, product.id, product.price, shortOrderId]
     );
     const order = orderRes.rows[0];
 
@@ -286,7 +294,7 @@ app.post('/api/orders', requireAuth, async (req, res) => {
       body: JSON.stringify({
         amount: product.price,
         description: `${product.name} - King Vypers Premium Key`,
-        order_id: String(order.id),
+        order_id: shortOrderId,
         webhook_url: webhookUrl || undefined,
         callback_url: callbackUrl || undefined,
       }),
