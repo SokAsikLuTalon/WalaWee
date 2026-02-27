@@ -63,7 +63,10 @@ app.post('/api/webhooks/temanqris', express.raw({ type: 'application/json' }), a
       [orderId]
     );
     const order = orderRes.rows[0];
-    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!order) {
+      console.warn('[TemanQRIS webhook] Order not found for order_id:', orderId, '- Pastikan bayar lewat link dari website kita (Proceed to Payment), bukan link yang di-generate dari dashboard TemanQRIS.');
+      return res.status(404).json({ error: 'Order not found' });
+    }
     const qty = Math.max(1, parseInt(order.quantity, 10) || 1);
 
     const userRes = await pool.query('SELECT display_name FROM users WHERE id = $1', [order.user_id]);
@@ -594,6 +597,11 @@ app.post('/api/admin/keys/generate', requireAuth, requireAdmin, async (req, res)
     console.error(e);
     return res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// --- Health (untuk Railway / monitoring) ---
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, time: new Date().toISOString() });
 });
 
 // --- Static (SPA) ---
