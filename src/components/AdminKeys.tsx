@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { Trash2, Ban, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface Key {
@@ -21,7 +21,6 @@ export function AdminKeys() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState('all');
-  const keysPerPage = 20;
 
   useEffect(() => {
     loadKeys();
@@ -30,22 +29,12 @@ export function AdminKeys() {
   const loadKeys = async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from('keys')
-        .select('*', { count: 'exact' })
-        .order('created_at', { ascending: false })
-        .range((currentPage - 1) * keysPerPage, currentPage * keysPerPage - 1);
-
-      if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter);
-      }
-
-      const { data, error, count } = await query;
-
-      if (error) throw error;
-
-      setKeys(data || []);
-      setTotalPages(Math.ceil((count || 0) / keysPerPage));
+      const data = await api.admin.keys({
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        page: currentPage,
+      });
+      setKeys(data.keys || []);
+      setTotalPages(data.totalPages ?? 1);
     } catch (error) {
       console.error('Error loading keys:', error);
     } finally {
@@ -69,69 +58,37 @@ export function AdminKeys() {
 
   const handleBulkDelete = async () => {
     if (!confirm(`Delete ${selectedKeys.length} keys?`)) return;
-
     try {
-      const { error } = await supabase.from('keys').delete().in('id', selectedKeys);
-
-      if (error) throw error;
-
+      await api.admin.keysBulk(selectedKeys, 'delete');
       setSelectedKeys([]);
       loadKeys();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error deleting keys:', error);
-      alert('Failed to delete keys');
+      alert(error instanceof Error ? error.message : 'Failed to delete keys');
     }
   };
 
   const handleBulkBlock = async () => {
     if (!confirm(`Block ${selectedKeys.length} keys?`)) return;
-
     try {
-      const { error } = await supabase
-        .from('keys')
-        .update({ status: 'blocked' })
-        .in('id', selectedKeys);
-
-      if (error) throw error;
-
+      await api.admin.keysBulk(selectedKeys, 'block');
       setSelectedKeys([]);
       loadKeys();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error blocking keys:', error);
-      alert('Failed to block keys');
+      alert(error instanceof Error ? error.message : 'Failed to block keys');
     }
   };
 
   const handleResetHwid = async (keyCode: string) => {
     if (!confirm('Reset HWID for this key?')) return;
-
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-hwid`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
-          body: JSON.stringify({
-            key_code: keyCode,
-            secret: import.meta.env.VITE_DISCORD_API_SECRET || 'admin-override',
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to reset HWID');
-      }
-
+      await api.admin.resetHwid(keyCode);
       alert('HWID reset successfully');
       loadKeys();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error resetting HWID:', error);
-      alert(error.message || 'Failed to reset HWID');
+      alert(error instanceof Error ? error.message : 'Failed to reset HWID');
     }
   };
 

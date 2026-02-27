@@ -1,7 +1,7 @@
-# Build: generate static files
+# Build: generate frontend then run Node server (API + static)
 [build]
 buildCommand = "npm run build"
 
-# Start: serve the dist folder (SPA mode)
+# Start: Express server (API + serves dist)
 [deploy]
 startCommand = "npm start"

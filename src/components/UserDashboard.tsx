@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Key, RotateCcw, Calendar, Clock } from 'lucide-react';
 
@@ -26,15 +26,8 @@ export function UserDashboard() {
 
   const loadUserKeys = async () => {
     if (!user) return;
-
     try {
-      const { data, error } = await supabase
-        .from('keys')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await api.keys.list();
       setKeys(data || []);
     } catch (error) {
       console.error('Error loading keys:', error);
@@ -47,35 +40,13 @@ export function UserDashboard() {
     if (!confirm('Are you sure you want to reset HWID? This can only be done once per 30 days.')) {
       return;
     }
-
     try {
-      const { data: session } = await supabase.auth.getSession();
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-hwid`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.session?.access_token}`,
-          },
-          body: JSON.stringify({
-            key_code: keyCode,
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to reset HWID');
-      }
-
+      const result = await api.keys.resetHwid(keyCode);
       alert(result.message);
       loadUserKeys();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error resetting HWID:', error);
-      alert(error.message || 'Failed to reset HWID');
+      alert(error instanceof Error ? error.message : 'Failed to reset HWID');
     }
   };
 
@@ -96,25 +67,19 @@ export function UserDashboard() {
 
   const getDaysRemaining = (expiresAt: string | null) => {
     if (!expiresAt) return null;
-
     const now = new Date();
     const expiry = new Date(expiresAt);
     const diff = expiry.getTime() - now.getTime();
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-
-    return days;
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
   };
 
   const canResetHwid = (key: UserKey) => {
     if (!key.hwid) return false;
     if (key.status === 'blocked' || key.status === 'expired') return false;
-
     if (!key.last_hwid_reset_at) return true;
-
     const now = new Date();
     const lastReset = new Date(key.last_hwid_reset_at);
     const daysSinceReset = (now.getTime() - lastReset.getTime()) / (1000 * 60 * 60 * 24);
-
     return daysSinceReset >= 30;
   };
 
@@ -144,7 +109,6 @@ export function UserDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {keys.map((key) => {
               const daysRemaining = getDaysRemaining(key.expires_at);
-
               return (
                 <div
                   key={key.id}
@@ -196,7 +160,6 @@ export function UserDashboard() {
                             </div>
                           </div>
                         </div>
-
                         {daysRemaining !== null && (
                           <div className="flex items-center gap-2">
                             <Clock className="w-4 h-4 text-gray-400" />
@@ -219,7 +182,6 @@ export function UserDashboard() {
                       <div className="text-gray-400 text-xs">
                         HWID Resets: {key.hwid_reset_count}
                       </div>
-
                       {canResetHwid(key) ? (
                         <button
                           onClick={() => handleResetHwid(key.key_code)}

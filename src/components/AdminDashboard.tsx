@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { BarChart3, Key, ShoppingBag, DollarSign } from 'lucide-react';
 
 interface DashboardStats {
@@ -24,20 +24,12 @@ export function AdminDashboard() {
 
   const loadStats = async () => {
     try {
-      const { data: keys } = await supabase.from('keys').select('status, price');
-
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('amount')
-        .eq('payment_status', 'paid');
-
-      const totalRevenue = orders?.reduce((sum, order) => sum + order.amount, 0) || 0;
-
+      const data = await api.admin.stats();
       setStats({
-        totalKeys: keys?.length || 0,
-        activeKeys: keys?.filter((k) => k.status === 'active').length || 0,
-        usedKeys: keys?.filter((k) => k.status === 'used').length || 0,
-        totalRevenue,
+        totalKeys: data.totalKeys,
+        activeKeys: data.activeKeys,
+        usedKeys: data.usedKeys,
+        totalRevenue: data.totalRevenue,
       });
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -55,24 +47,9 @@ export function AdminDashboard() {
   }
 
   const statCards = [
-    {
-      title: 'Total Keys',
-      value: stats.totalKeys,
-      icon: Key,
-      color: 'bg-blue-600',
-    },
-    {
-      title: 'Active Keys',
-      value: stats.activeKeys,
-      icon: BarChart3,
-      color: 'bg-green-600',
-    },
-    {
-      title: 'Used Keys',
-      value: stats.usedKeys,
-      icon: ShoppingBag,
-      color: 'bg-yellow-600',
-    },
+    { title: 'Total Keys', value: stats.totalKeys, icon: Key, color: 'bg-blue-600' },
+    { title: 'Active Keys', value: stats.activeKeys, icon: BarChart3, color: 'bg-green-600' },
+    { title: 'Used Keys', value: stats.usedKeys, icon: ShoppingBag, color: 'bg-yellow-600' },
     {
       title: 'Total Revenue',
       value: `IDR ${stats.totalRevenue.toLocaleString()}`,
@@ -84,7 +61,6 @@ export function AdminDashboard() {
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((stat) => {
           const Icon = stat.icon;

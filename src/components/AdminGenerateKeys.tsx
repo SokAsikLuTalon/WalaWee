@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { Plus, Download } from 'lucide-react';
 
 interface Product {
@@ -15,7 +15,7 @@ export function AdminGenerateKeys() {
   const [selectedProduct, setSelectedProduct] = useState('');
   const [quantity, setQuantity] = useState(10);
   const [loading, setLoading] = useState(false);
-  const [generatedKeys, setGeneratedKeys] = useState<any[]>([]);
+  const [generatedKeys, setGeneratedKeys] = useState<Array<{ id: string; key_code: string; created_at: string }>>([]);
 
   useEffect(() => {
     loadProducts();
@@ -23,15 +23,9 @@ export function AdminGenerateKeys() {
 
   const loadProducts = async () => {
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('duration_days', { ascending: true });
-
-      if (error) throw error;
-
+      const data = await api.products.list();
       setProducts(data || []);
-      if (data && data.length > 0) {
+      if (data?.length) {
         setSelectedProduct(data[0].id);
       }
     } catch (error) {
@@ -41,45 +35,20 @@ export function AdminGenerateKeys() {
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!selectedProduct || quantity < 1) {
       alert('Please select a product and valid quantity');
       return;
     }
-
     setLoading(true);
     setGeneratedKeys([]);
-
     try {
-      const { data: session } = await supabase.auth.getSession();
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-keys`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.session?.access_token}`,
-          },
-          body: JSON.stringify({
-            product_id: selectedProduct,
-            quantity,
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to generate keys');
-      }
-
+      const result = await api.admin.generateKeys(selectedProduct, quantity);
       setGeneratedKeys(result.keys || []);
-      alert(`Successfully generated ${quantity} keys!`);
+      alert(result.message || `Successfully generated ${quantity} keys!`);
       loadProducts();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error generating keys:', error);
-      alert(error.message || 'Failed to generate keys');
+      alert(error instanceof Error ? error.message : 'Failed to generate keys');
     } finally {
       setLoading(false);
     }
@@ -87,20 +56,18 @@ export function AdminGenerateKeys() {
 
   const handleDownloadCSV = () => {
     if (generatedKeys.length === 0) return;
-
     const csv = [
       ['Key Code', 'Duration (days)', 'Price', 'Status', 'Created At'].join(','),
       ...generatedKeys.map((key) =>
         [
           key.key_code,
-          key.duration_days,
-          key.price,
-          key.status,
+          '',
+          '',
+          'active',
           new Date(key.created_at).toLocaleString(),
         ].join(',')
       ),
     ].join('\n');
-
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -173,7 +140,7 @@ export function AdminGenerateKeys() {
               onClick={handleDownloadCSV}
               className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2"
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-5 h-5" />
               Download CSV
             </button>
           </div>

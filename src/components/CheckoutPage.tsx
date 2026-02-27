@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { useState, useEffect, useRef } from 'react';
+import { api } from '../lib/api';
 import { ArrowLeft, CreditCard, CheckCircle } from 'lucide-react';
 
 interface Product {
@@ -17,6 +17,8 @@ interface CheckoutPageProps {
   onSuccess: (keyCode: string) => void;
 }
 
+const POLL_INTERVAL_MS = 2500;
+
 export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps) {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,107 +27,51 @@ export function CheckoutPage({ productId, onBack, onSuccess }: CheckoutPageProps
   const [orderId, setOrderId] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'pending' | 'success'>('idle');
   const [purchasedKey, setPurchasedKey] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    loadProduct();
+    api.products.get(productId).then(setProduct).catch(() => setProduct(null)).finally(() => setLoading(false));
   }, [productId]);
 
   useEffect(() => {
-    if (orderId && paymentStatus === 'pending') {
-      const channel = supabase
-        .channel(`order-${orderId}`)
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'orders',
-            filter: `id=eq.${orderId}`,
-          },
-          (payload) => {
-            if (payload.new.payment_status === 'paid') {
-              setPaymentStatus('success');
-              loadPurchasedKey(payload.new.key_id);
-            }
+    if (!orderId || paymentStatus !== 'pending') return;
+
+    const checkOrder = async () => {
+      try {
+        const order = await api.orders.get(orderId);
+        if (order.payment_status === 'paid' && order.key_id) {
+          setPaymentStatus('success');
+          const keyData = await api.keys.getById(order.key_id);
+          setPurchasedKey(keyData.key_code);
+          if (pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
           }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [orderId, paymentStatus]);
-
-  const loadProduct = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('id', productId)
-        .maybeSingle();
-
-      if (error) throw error;
-      setProduct(data);
-    } catch (error) {
-      console.error('Error loading product:', error);
-      alert('Failed to load product');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadPurchasedKey = async (keyId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('keys')
-        .select('key_code')
-        .eq('id', keyId)
-        .maybeSingle();
-
-      if (error) throw error;
-      if (data) {
-        setPurchasedKey(data.key_code);
+        }
+      } catch {
+        // ignore
       }
-    } catch (error) {
-      console.error('Error loading key:', error);
-    }
-  };
+    };
+
+    pollRef.current = setInterval(checkOrder, POLL_INTERVAL_MS);
+    checkOrder();
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [orderId, paymentStatus]);
 
   const handleCheckout = async () => {
     if (!product) return;
 
     setProcessing(true);
-
     try {
-      const { data: session } = await supabase.auth.getSession();
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-payment`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.session?.access_token}`,
-          },
-          body: JSON.stringify({
-            product_id: product.id,
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to create payment');
-      }
-
+      const result = await api.orders.create(product.id);
       setQrisUrl(result.qris_url);
       setOrderId(result.order_id);
       setPaymentStatus('pending');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error creating payment:', error);
-      alert(error.message || 'Failed to create payment');
+      alert(error instanceof Error ? error.message : 'Failed to create payment');
     } finally {
       setProcessing(false);
     }

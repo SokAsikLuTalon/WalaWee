@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { ShoppingCart, Check, Package } from 'lucide-react';
 
@@ -23,12 +23,7 @@ export function StoreLanding({ onBuyClick }: { onBuyClick: (productId: string) =
 
   const loadProducts = async () => {
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('duration_days', { ascending: true });
-
-      if (error) throw error;
+      const data = await api.products.list();
       setProducts(data || []);
     } catch (error) {
       console.error('Error loading products:', error);

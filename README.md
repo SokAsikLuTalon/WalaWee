@@ -1,197 +1,136 @@
 # King Vypers Premium Key Store
 
-A fullstack web application for selling and managing premium activation keys with HWID binding, built with React, TypeScript, and Supabase.
-
-## Features
-
-### User Features
-- Browse and purchase premium keys
-- Secure payment processing via TemanQRIS
-- Real-time payment confirmation
-- View all purchased keys in dashboard
-- HWID binding for device protection
-- Self-service HWID reset (once per 30 days)
-- Key expiration tracking
-
-### Admin Features
-- Dashboard with key statistics and revenue tracking
-- Generate keys in bulk for any product/duration
-- Import/export keys via CSV
-- Manage all keys (view, block, delete)
-- Reset HWID for any key
-- Real-time stock tracking
+Fullstack web app untuk jual-beli dan mengelola premium activation keys dengan HWID binding. **Semua jalan di Railway**: backend Node.js + PostgreSQL (tanpa Supabase atau layanan eksternal lain).
 
 ## Tech Stack
 
-- **Frontend**: React 18 + TypeScript + Vite
-- **Styling**: Tailwind CSS
-- **Database**: Supabase (PostgreSQL)
-- **Authentication**: Supabase Auth
-- **Payment**: TemanQRIS Integration
-- **Edge Functions**: Supabase Edge Functions (Deno)
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS
+- **Backend**: Node.js + Express
+- **Database**: PostgreSQL (Railway)
+- **Auth**: Session (express-session + cookie, user disimpan di PostgreSQL)
+- **Payment**: TemanQRIS (QRIS)
 
-## Setup Instructions
+## Setup lokal
 
-### 1. Environment Variables
+### 1. Environment
 
-Create a `.env` file in the project root:
+Copy `.env.example` jadi `.env` dan isi:
 
 ```env
-VITE_SUPABASE_URL=your_supabase_project_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-VITE_TEMANQRIS_API_KEY=your_temanqris_api_key
+DATABASE_URL=postgresql://user:password@host:port/database
+SESSION_SECRET=random-string-min-32-karakter
+TEMANQRIS_API_KEY=your_temanqris_api_key
 TEMANQRIS_WEBHOOK_SECRET=your_webhook_secret
-DISCORD_API_SECRET=your_discord_bot_secret
-VITE_BASE_URL=http://localhost:5173
+DISCORD_API_SECRET=optional_discord_bot_secret
 ```
 
-### 2. Install Dependencies
+### 2. Database
+
+Jalankan schema di PostgreSQL (Railway atau lokal):
+
+```bash
+psql $DATABASE_URL -f database/schema.sql
+```
+
+Atau di Railway: Dashboard → PostgreSQL → Query → paste isi `database/schema.sql` → Run.
+
+### 3. Install & jalankan
 
 ```bash
 npm install
 ```
 
-### 3. Database Setup
+Development (dua terminal):
 
-The database schema is already deployed via Supabase migrations. It includes:
-- Products table (pre-seeded with 12 duration options)
-- Keys table (for license key management)
-- Orders table (for payment tracking)
-- User profiles table (for admin flags)
+- Terminal 1: `npm run server` (API di http://localhost:3000)
+- Terminal 2: `npm run dev` (Vite di http://localhost:5173, proxy `/api` ke server)
 
-### 4. Create Admin User
-
-To create an admin user:
-
-1. Sign up for a new account in the app
-2. Go to your Supabase dashboard
-3. Navigate to Table Editor > user_profiles
-4. Find your user and set `is_admin` to `true`
-
-### 5. Configure TemanQRIS Webhook
-
-Set up the webhook URL in your TemanQRIS dashboard:
-
-```
-https://your-supabase-project.supabase.co/functions/v1/temanqris-webhook
-```
-
-### 6. Run Development Server
+Atau satu perintah:
 
 ```bash
-npm run dev
+npm run dev:all
 ```
 
-The app will be available at `http://localhost:5173`
+Lalu buka http://localhost:5173.
 
-## API Endpoints
+### 4. Admin user
 
-### Edge Functions
+1. Daftar akun baru lewat app (Sign Up).
+2. Di database: tabel `users` → set `is_admin = true` untuk user tersebut.
 
-- **POST** `/functions/v1/create-payment` - Create payment for product purchase
-- **POST** `/functions/v1/temanqris-webhook` - Handle TemanQRIS payment confirmations
-- **POST** `/functions/v1/reset-hwid` - Reset HWID for a key
-- **POST** `/functions/v1/generate-keys` - Generate keys in bulk (admin only)
+## Deploy ke Railway
 
-### Discord Bot Integration
+Semua jalan di satu project Railway: **PostgreSQL** + **satu service Node** (API + static frontend).
 
-The reset-hwid endpoint supports Discord bot integration:
+### Langkah
 
-```javascript
-POST /functions/v1/reset-hwid
-{
-  "key_code": "XXXX-XXXX-XXXX-XXXX",
-  "secret": "your_discord_api_secret"
-}
-```
+1. **Buat project Railway**  
+   New Project → pilih **Deploy from GitHub repo** (atau CLI), pilih repo ini.
 
-## Key Features Explained
+2. **Tambah PostgreSQL**  
+   Di project yang sama: **New** → **Database** → **PostgreSQL**.  
+   Nanti dapat `DATABASE_URL` (reference variable).
 
-### Key Generation
+3. **Jalankan schema**  
+   Railway → PostgreSQL → **Data** / **Query** → jalankan isi `database/schema.sql` sekali.
 
-Keys are generated in the format: `XXXX-XXXX-XXXX-XXXX` (uppercase alphanumeric)
+4. **Deploy service app**  
+   Tambah service dari repo yang sama.  
+   Build & start pakai `railway.toml`:
+   - Build: `npm run build`
+   - Start: `npm start` (Express serve API + static dari `dist/`)
 
-Admins can generate keys in bulk:
-- Select product/duration (30-360 days)
-- Choose quantity (10-1000 keys)
-- Keys are automatically linked to the product
-- Stock count updates automatically
+5. **Generate domain**  
+   Di service app: **Settings** → **Networking** → **Generate Domain**.  
+   Simpan URL (misalnya `https://xxx.up.railway.app`).
 
-### HWID Binding
+6. **Variable environment**  
+   Di service app, set:
 
-- When a key is activated, it binds to the user's hardware ID
-- One key can only be used on one device
-- Users can reset HWID once per 30 days
-- Admins can reset HWID anytime
+   - `DATABASE_URL` → reference dari PostgreSQL (atau paste connection string)
+   - `SESSION_SECRET` → string acak minimal 32 karakter
+   - `TEMANQRIS_API_KEY` → API key TemanQRIS
+   - `TEMANQRIS_WEBHOOK_SECRET` → secret untuk verifikasi webhook
+   - `DISCORD_API_SECRET` → (opsional) untuk reset HWID dari Discord bot
+   - `FRONTEND_ORIGIN` → URL domain Railway (misalnya `https://xxx.up.railway.app`)
 
-### Payment Flow
+   Tidak perlu `VITE_*` untuk production karena frontend dan API satu origin.
 
-1. User selects product and clicks "Buy Now"
-2. System creates order and requests QRIS code from TemanQRIS
-3. User scans QR code to pay
-4. TemanQRIS sends webhook confirmation
-5. System assigns available key to user
-6. User sees key in dashboard immediately
+7. **Webhook TemanQRIS**  
+   Di dashboard TemanQRIS, set URL webhook ke:
 
-### Security Features
+   ```
+   https://xxx.up.railway.app/api/webhooks/temanqris
+   ```
 
-- Row Level Security (RLS) enabled on all tables
-- Users can only see their own keys and orders
-- Admin access is checked via user_profiles.is_admin
-- Webhook signature verification for TemanQRIS
-- HMAC-SHA256 for webhook security
+8. **Redeploy**  
+   Setelah variabel diset, redeploy service app.
 
-## Building for Production
+## API (backend)
 
-```bash
-npm run build
-```
+- `POST /api/auth/register` – Daftar
+- `POST /api/auth/login` – Login
+- `POST /api/auth/logout` – Logout
+- `GET /api/auth/me` – User saat ini (session)
+- `GET /api/products` – Daftar produk (public)
+- `GET /api/products/:id` – Detail produk (public)
+- `GET /api/keys` – Key milik user (auth)
+- `POST /api/orders` – Buat order + QRIS (auth)
+- `GET /api/orders/:id` – Status order (auth, untuk polling)
+- `POST /api/keys/reset-hwid` – Reset HWID key user (auth)
+- `POST /api/webhooks/temanqris` – Webhook TemanQRIS (verifikasi signature)
+- `GET /api/admin/stats` – Statistik (admin)
+- `GET /api/admin/keys` – Daftar key (admin, pagination + filter)
+- `PATCH /api/admin/keys/bulk` – Block/delete key (admin)
+- `POST /api/admin/keys/reset-hwid` – Reset HWID (admin atau Discord secret)
+- `POST /api/admin/keys/generate` – Generate key bulk (admin)
 
-The build output will be in the `dist` folder.
+## Fitur
 
-## Deploy to Railway
-
-Proyek ini sudah siap deploy ke [Railway](https://railway.app). Yang di-deploy hanya **frontend** (backend tetap di Supabase).
-
-### Langkah deploy
-
-1. **Push project ke GitHub** (kalau belum)
-   - Buat repo di GitHub, push project kamu.
-
-2. **Buat project di Railway**
-   - Buka [railway.app](https://railway.app) → login/sign up.
-   - **New Project** → **Deploy from GitHub repo**.
-   - Pilih repo project ini.
-   - Railway akan deteksi Node.js dan pakai `railway.toml` (build: `npm run build`, start: `npm start`).
-
-3. **Generate domain**
-   - Di service yang baru dibuat: **Settings** → **Networking** → **Generate Domain**.
-   - Simpan URL-nya (misalnya `https://xxx.up.railway.app`).
-
-4. **Set environment variables**
-   - **Variables** (tab Variables) → tambahkan variabel dari `.env.example`:
-   - `VITE_SUPABASE_URL` = URL project Supabase
-   - `VITE_SUPABASE_ANON_KEY` = anon key Supabase
-   - `VITE_TEMANQRIS_API_KEY` = API key TemanQRIS
-   - `VITE_BASE_URL` = **URL domain Railway** (misalnya `https://xxx.up.railway.app`)
-   - Variabel yang tidak pakai prefix `VITE_` (misalnya `TEMANQRIS_WEBHOOK_SECRET`, `DISCORD_API_SECRET`) hanya dipakai di Supabase Edge Functions, tidak perlu di Railway.
-
-5. **Redeploy**
-   - Setelah variabel diisi, trigger **Redeploy** supaya build baru pakai env yang benar.
-
-### Penting
-
-- **TemanQRIS webhook** tetap mengarah ke Supabase:  
-  `https://your-project.supabase.co/functions/v1/temanqris-webhook`
-- **VITE_BASE_URL** harus pakai URL production (domain Railway), agar redirect/auth dan link di app benar.
-
-## Admin Panel Access
-
-Navigate to the Admin section after logging in with an admin account:
-- Dashboard: View statistics
-- Manage Keys: Browse, filter, block, delete keys
-- Generate Keys: Create new keys in bulk
+- **User**: Daftar, login, beli key (QRIS), lihat key, reset HWID (1x/30 hari).
+- **Admin**: Dashboard statistik, kelola key (block/delete), generate key bulk, reset HWID kapan saja.
+- **Webhook**: TemanQRIS panggil `/api/webhooks/temanqris` → order jadi paid, key otomatis di-assign ke user.
 
 ## Support
 
-For issues or questions, please contact support.
+Untuk pertanyaan atau issue, hubungi support.
